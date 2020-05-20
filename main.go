@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"math/rand"
 	"os"
+	"time"
 
 	termbox "github.com/nsf/termbox-go"
 )
@@ -14,6 +16,7 @@ type board struct {
 	size  int
 	x     int
 	y     int
+	clear bool
 }
 
 func newBoard(size int) *board {
@@ -35,11 +38,83 @@ func newBoard(size int) *board {
 	return &board{board: tmp, size: size, x: x, y: y}
 }
 
+func (b *board) judge() bool {
+	n := 1
+	for i, line := range b.board {
+		for j, cell := range line {
+			if i+1 == b.size && j+1 == b.size {
+				continue
+			}
+			if cell != n {
+				b.clear = false
+				return false
+			}
+			n++
+		}
+	}
+	b.clear = true
+	b.draw()
+	return true
+}
+
+func (b *board) swapToLeft() bool {
+	i, j := b.y, b.x
+	if j+1 >= b.size {
+		return false
+	}
+	b.swap(i, j, i, j+1)
+	return true
+}
+
+func (b *board) swapToRight() bool {
+	i, j := b.y, b.x
+	if j-1 < 0 {
+		return false
+	}
+	b.swap(i, j, i, j-1)
+	return true
+}
+
+func (b *board) swapToUp() bool {
+	i, j := b.y, b.x
+	if i+1 >= b.size {
+		return false
+	}
+	b.swap(i, j, i+1, j)
+	return true
+}
+
+func (b *board) swapToDown() bool {
+	i, j := b.y, b.x
+	if i-1 < 0 {
+		return false
+	}
+	b.swap(i, j, i-1, j)
+	return true
+}
+
 func (b *board) swap(i, j, k, l int) {
 	v := b.board[i][j]
 	b.board[i][j] = b.board[k][l]
 	b.board[k][l] = v
 	b.x, b.y = l, k
+}
+
+func (b *board) shuffle() {
+	funcs := []func() bool{
+		b.swapToLeft,
+		b.swapToRight,
+		b.swapToUp,
+		b.swapToDown,
+	}
+	for i := 0; i < 10000; i++ {
+		p := rand.Intn(len(funcs))
+		if !funcs[p]() {
+			i--
+			continue
+		}
+		b.draw()
+	}
 }
 
 func (b *board) draw() {
@@ -76,6 +151,16 @@ func (b *board) draw() {
 		y++
 		hr()
 	}
+
+	if b.clear {
+		x := 0
+		s := fmt.Sprint(" [CLEAR!!]")
+		for i, c := range s {
+			termbox.SetCell(x+i, y, c, coldef, coldef)
+		}
+		y++
+	}
+
 	termbox.Flush()
 }
 
@@ -95,6 +180,7 @@ func scan() (string, error) {
 var sc *bufio.Scanner
 
 func init() {
+	rand.Seed(time.Now().UnixNano())
 	sc = bufio.NewScanner(os.Stdin)
 }
 
@@ -108,6 +194,8 @@ func main() {
 	}
 	defer termbox.Close()
 
+	b.shuffle()
+
 	for {
 		b.draw()
 
@@ -117,37 +205,40 @@ func main() {
 			case termbox.KeyEsc:
 				return
 			case termbox.KeyArrowLeft:
-				// left
-				i, j := b.y, b.x
-				if j+1 >= b.size {
+				if !b.swapToLeft() {
 					b.draw()
 					continue
 				}
-				b.swap(i, j, i, j+1)
 			case termbox.KeyArrowRight:
-				// right
-				i, j := b.y, b.x
-				if j-1 < 0 {
+				if !b.swapToRight() {
 					b.draw()
 					continue
 				}
-				b.swap(i, j, i, j-1)
 			case termbox.KeyArrowUp:
-				// up
-				i, j := b.y, b.x
-				if i+1 >= b.size {
+				if !b.swapToUp() {
 					b.draw()
 					continue
 				}
-				b.swap(i, j, i+1, j)
 			case termbox.KeyArrowDown:
-				// down
-				i, j := b.y, b.x
-				if i-1 < 0 {
+				if !b.swapToDown() {
 					b.draw()
 					continue
 				}
-				b.swap(i, j, i-1, j)
+			}
+		}
+
+		if b.judge() {
+			for {
+				switch ev := termbox.PollEvent(); ev.Type {
+				case termbox.EventKey:
+					switch ev.Key {
+					case termbox.KeyEsc:
+						return
+					case termbox.KeySpace:
+						b.clear = false
+						b.shuffle()
+					}
+				}
 			}
 		}
 	}
